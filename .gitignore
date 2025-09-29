@@ -1,7 +1,6 @@
 
 # Ignore compiled Python files
 __pycache__/
-*.pyc
 
 # Ignore dataset folders
 FOLIO-main/data/

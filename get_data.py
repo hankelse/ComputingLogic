@@ -103,12 +103,12 @@ le_symbol_set = {
     "IMPLIES" : le_implies
     }
 
-arguments = get_logical_entailment_data()
-first = arguments[0]
+# arguments = get_logical_entailment_data()
+# first = arguments[0]
 
 
-print(first)
-print(swap_symbols(first, le_symbol_set, SYMBOL_SET))
+# print(first)
+# print(swap_symbols(first, le_symbol_set, SYMBOL_SET))
 import ast
 
 # ===== FOLIO ===== #
@@ -145,6 +145,15 @@ def load_folio_data():
             data_dict[key] = value
 
     return data_dict
+
+
+def reshape_data(dataset):
+    X = [(d["premises"], d["conclusion"]) for d in dataset]
+    y = [d["label"] for d in dataset]
+    maps = [d["map"] for d in dataset]
+    return X, y, maps
+
+
 
 
 '''

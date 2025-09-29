@@ -1,16 +1,9 @@
-from get_data import get_folio_data, relabel_folio_data
+from get_data import get_folio_data, relabel_folio_data, reshape_data
 from testing import run_tests
 from pprint import pprint
-from constants import VALID, INVALID
+from constants import VALID, INVALID, NOT, OR, AND, IMPLIES
 import itertools
-
-
-
-def reshape_data(dataset):
-    X = [(d["premises"], d["conclusion"]) for d in dataset]
-    y = [d["label"] for d in dataset]
-    maps = [d["map"] for d in dataset]
-    return X, y, maps
+from WFF import WFF
 
 
 def brute_force_validity(premises, conclusion):
@@ -54,7 +47,6 @@ def brute_force_validity(premises, conclusion):
 
 
 
-
 def main():
     # Get foilio data
     f_data = get_folio_data()
@@ -65,11 +57,25 @@ def main():
     # Relabel maps
     labels = relabel_folio_data(labels)
 
-    # Get solver
-    algo = lambda premises, conclusion : VALID
+    # Test argument
+    premises = [
+        "a", str(NOT+"b"), str("a"+OR+"b"), str(NOT+"a"+OR+"c"), str(NOT+"a"+AND+"c"), str(NOT+"a"+IMPLIES+"c"), 
+        (f"({NOT}a {OR} b) {IMPLIES} {NOT} (a {AND} {NOT} c)")
+    ]
+    conclusion = "c"
+    argument = (premises, conclusion)
 
-    #Run tests
-    run_tests(algo, arguments, labels)
+    for p in premises[3:]:
+        print(p, "-->", end="")
+        p = WFF(p)
+        print(p)
+
+        print("True:", p.made_true())
+        print("False:", p.made_false())
+
+        
+
+
 
     
 main()
