@@ -166,22 +166,22 @@ tests = [
     f"(a {IMPLIES} (b {OR} c)) {AND} ({NOT}d {IMPLIES} (e {AND} f))"  # real stress test
 ]
 
-wff_tests = [WFF(test) for test in tests]
+# wff_tests = [WFF(test) for test in tests]
 
-for wt in wff_tests:
-    print(f"Given: {wt}")
+# for wt in wff_tests:
+#     print(f"Given: {wt}")
 
-    wt = eliminate_implications(wt)
-    print(f"\tNo Implies: \t{wt}")
+#     wt = eliminate_implications(wt)
+#     print(f"\tNo Implies: \t{wt}")
 
-    wt = eliminate_double_negations(wt)
-    print(f"\tNo ~~:      \t{wt}")
+#     wt = eliminate_double_negations(wt)
+#     print(f"\tNo ~~:      \t{wt}")
 
-    wt = demorgans(wt)
-    print(f"\tDeMorgan's: \t{wt}")
+#     wt = demorgans(wt)
+#     print(f"\tDeMorgan's: \t{wt}")
     
-    wt = eliminate_double_negations(wt)
-    print(f"\tNo ~~:      \t{wt}")
+#     wt = eliminate_double_negations(wt)
+#     print(f"\tNo ~~:      \t{wt}")
 
-    wt = conjunction_to_disjunction(wt)
-    print(f"\tNo ANDS:    \t{wt}")
+#     wt = conjunction_to_disjunction(wt)
+#     print(f"\tNo ANDS:    \t{wt}")

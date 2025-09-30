@@ -5,6 +5,8 @@ from constants import VALID, INVALID, NOT, OR, AND, IMPLIES
 import itertools
 from WFF import WFF
 
+from cnf import to_cnf
+
 
 def brute_force_validity(premises, conclusion):
     # Collect all atoms (like Aa, Bb, etc.)
