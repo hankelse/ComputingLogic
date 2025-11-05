@@ -71,8 +71,10 @@ def cnf_to_clauses(wff, varmap=None, counter=None):
     from WFF import ATOMIC_WFF, UNARY_WFF, BINARY_WFF
     from constants import AND, OR, NOT
 
-    if varmap is None: varmap = {}
-    if counter is None: counter = [1]
+    if varmap is None:
+        varmap = {}
+    if counter is None:
+        counter = [1]
 
     def get_var(symbol):
         if symbol not in varmap:
@@ -80,24 +82,34 @@ def cnf_to_clauses(wff, varmap=None, counter=None):
             counter[0] += 1
         return varmap[symbol]
 
+    # --- Base case: Atomic ---
     if wff.type == ATOMIC_WFF:
-        return [[get_var(wff.string)]]
+        return [[get_var(wff.string)]], varmap
 
+    # --- Negation ---
+    # if wff.type == UNARY_WFF and wff.main_operator == NOT:
+    #     child = wff.operands[0]
+    #     return [[-get_var(repr(child))]], varmap
     if wff.type == UNARY_WFF and wff.main_operator == NOT:
         child = wff.operands[0]
-        return [[-get_var(child.string)]]
+        if child.type != ATOMIC_WFF:
+            raise ValueError("CNF should only have negation on atoms")
+        return [[-get_var(child.string)]], varmap
 
+    # --- OR (disjunction) ---
     if wff.main_operator == OR:
-        left = cnf_to_clauses(wff.operands[0], varmap, counter)
-        right = cnf_to_clauses(wff.operands[1], varmap, counter)
-        return [left[0] + right[0]]
+        left_clauses, varmap = cnf_to_clauses(wff.operands[0], varmap, counter)
+        right_clauses, varmap = cnf_to_clauses(wff.operands[1], varmap, counter)
+        return [left_clauses[0] + right_clauses[0]], varmap
 
+    # --- AND (conjunction) ---
     if wff.main_operator == AND:
-        left = cnf_to_clauses(wff.operands[0], varmap, counter)
-        right = cnf_to_clauses(wff.operands[1], varmap, counter)
-        return left + right
+        left_clauses, varmap = cnf_to_clauses(wff.operands[0], varmap, counter)
+        right_clauses, varmap = cnf_to_clauses(wff.operands[1], varmap, counter)
+        return left_clauses + right_clauses, varmap
 
     raise ValueError("Unexpected structure in CNF")
+
 
 
 from pysat.solvers import Glucose3
@@ -162,7 +174,7 @@ def build_argument_wff(premises, conclusion):
     else:
         return not_conclusion
     
-def check_argument_validity(premises, conclusion):
+# def check_argument_validity(premises, conclusion):
     arg_wff = build_argument_wff(premises, conclusion)
     cnf_wff = to_cnf(arg_wff)
     clauses, varmap = cnf_to_clauses(cnf_wff), {}
@@ -177,27 +189,64 @@ def check_argument_validity(premises, conclusion):
         return False, named_model  # invalid, counterexample
     else:
         return True, None  # valid
+    
+
+from pysat.solvers import Glucose3
+
+def check_argument_validity(arg_wff):
+    """
+    Given a single WFF representing (premises ∧ ¬conclusion),
+    determines whether the argument is valid using a SAT solver.
+    Returns:
+        (is_valid, model, decoded_model)
+    """
+
+    # --- Convert to CNF ---
+    cnf_wff = to_cnf(arg_wff)
+    # print(f"CNF Form: {cnf_wff}")
+
+    clauses, varmap = cnf_to_clauses(cnf_wff)
+
+    
+
+    # --- Initialize solver ---
+    solver = Glucose3()
+    for clause in clauses:
+        solver.add_clause(clause)
+
+    # --- Solve ---
+    sat = solver.solve()
+
+    if sat:
+        # Argument is INVALID
+        model = solver.get_model()          # list of ints, e.g. [1, -2, 3]
+        decoded = decode_model(model, varmap)  # dict like {'A': True, 'B': False}
+        return False, model, decoded
+    else:
+        # Argument is VALID
+        return True, None, None
 
 
 
-# --- Main loop over arguments ---
-def check_all_arguments(arguments):
-    results = []
-    for premises, conclusion in arguments:
-        is_valid, model = check_argument_validity(premises, conclusion)
-        results.append((premises, conclusion, is_valid, model))
-    return results
+
+# # --- Main loop over arguments ---
+# def check_all_arguments(arguments):
+#     results = []
+#     for premises, conclusion in arguments:
+#         is_valid, model = check_argument_validity(premises, conclusion)
+#         results.append((premises, conclusion, is_valid, model))
+#     return results
 
 
 
 
-# --- Main loop over arguments ---
-def check_all_arguments(arguments):
-    results = []
-    for premises, conclusion in arguments:
-        is_valid, model = check_argument_validity(premises, conclusion)
-        results.append((premises, conclusion, is_valid, model))
-    return results
+# # --- Main loop over arguments ---
+# def check_all_arguments(arguments):
+#     results = []
+#     for premises, conclusion in arguments:
+#         is_valid, model = check_argument_validity(premises, conclusion)
+#         results.append((premises, conclusion, is_valid, model))
+#     return results
 
 
 def decode_model(model, varmap):
@@ -241,4 +290,4 @@ def main():
 
 
 
-main() 
+# main() 

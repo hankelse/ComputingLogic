@@ -61,33 +61,55 @@ def eliminate_double_negations(wff : WFF):
         return wff
 
 
-def demorgans(wff : WFF):
-    if wff.type == ATOMIC_WFF: return wff
-
-    if wff.type == UNARY_WFF: 
-        child = demorgans(wff.operands[0])
-
-        if child.type == BINARY_WFF:
-            if child.main_operator == AND: new_op = OR
-            elif child.main_operator == OR: new_op = AND
-
-            child_op1 = demorgans(child.operands[0])
-            child_op2 = demorgans(child.operands[1])
-            
-            not_child_op1 = WFF("", True, NOT, [child_op1])
-            not_child_op2 = WFF("", True, NOT, [child_op2])
-
-            return WFF("", True, new_op, [not_child_op1, not_child_op2])
-        else:
-            wff.operands = [child]
-            return wff
-
-    if wff.type == BINARY_WFF:
-        op1 = demorgans(wff.operands[0])
-        op2 = demorgans(wff.operands[1])
-
-        wff.operands = [op1, op2]
+def demorgans(wff: WFF) -> WFF:
+    """
+    Push negations inward using De Morgan's laws:
+      ¬(A ∧ B) → (¬A ∨ ¬B)
+      ¬(A ∨ B) → (¬A ∧ ¬B)
+      ¬¬A → A
+    """
+    if wff.type == ATOMIC_WFF:
         return wff
+
+    # --- Negation case ---
+    if wff.type == UNARY_WFF and wff.main_operator == NOT:
+        child = wff.operands[0]
+
+        # Recursively process the inside first
+        child = demorgans(child)
+
+        # Apply De Morgan’s
+        if child.type == BINARY_WFF:
+            if child.main_operator == AND:
+                new_op = OR
+            elif child.main_operator == OR:
+                new_op = AND
+            else:
+                # If it's some other binary op (shouldn't happen in CNF)
+                return WFF(None, from_WFF=True, main_operator=NOT, operands=[child])
+
+            not_left = WFF(None, from_WFF=True, main_operator=NOT, operands=[child.operands[0]])
+            not_right = WFF(None, from_WFF=True, main_operator=NOT, operands=[child.operands[1]])
+
+            return WFF(None, from_WFF=True, main_operator=new_op,
+                       operands=[demorgans(not_left), demorgans(not_right)])
+
+        # Double negation
+        elif child.type == UNARY_WFF and child.main_operator == NOT:
+            return demorgans(child.operands[0])
+
+        # Atomic negation — base case
+        return WFF(None, from_WFF=True, main_operator=NOT, operands=[child])
+
+    # --- Binary case ---
+    if wff.type == BINARY_WFF:
+        left = demorgans(wff.operands[0])
+        right = demorgans(wff.operands[1])
+        return WFF(None, from_WFF=True, main_operator=wff.main_operator,
+                   operands=[left, right])
+
+    return wff
+
 
 
 
@@ -166,22 +188,3 @@ tests = [
     f"(a {IMPLIES} (b {OR} c)) {AND} ({NOT}d {IMPLIES} (e {AND} f))"  # real stress test
 ]
 
-# wff_tests = [WFF(test) for test in tests]
-
-# for wt in wff_tests:
-#     print(f"Given: {wt}")
-
-#     wt = eliminate_implications(wt)
-#     print(f"\tNo Implies: \t{wt}")
-
-#     wt = eliminate_double_negations(wt)
-#     print(f"\tNo ~~:      \t{wt}")
-
-#     wt = demorgans(wt)
-#     print(f"\tDeMorgan's: \t{wt}")
-    
-#     wt = eliminate_double_negations(wt)
-#     print(f"\tNo ~~:      \t{wt}")
-
-#     wt = conjunction_to_disjunction(wt)
-#     print(f"\tNo ANDS:    \t{wt}")

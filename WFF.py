@@ -1,35 +1,24 @@
 from constants import OPERATORS
-from constants import NOT, OR, AND, IMPLIES
+from constants import NOT, OR, AND, IMPLIES, UNIVERSAL_Q, EXISTENTIAL_Q
+from copy import deepcopy
+
+'''
 
 
-# def find_main_operator(string):
-#     '''
-#     Finds the outermost operator: The first operator at depth 0
-#         return before_operator, operator, after_operator
-#     If none to be found
-#         return None    
-#     '''
-#     # If it contains no operators, return None
-#     if not any(op in string for op in OPERATORS):  return None
+Strict WFFS --> Quantifers, implications, etc
 
-#     # Find the operator
-#     operator = None
-#     search_depth = 0 ## Covers if the whole thing is wrapped in parantheses because non at depth 0 will be found but there will be operators
-    
-#     while operator == None:
-#         current_depth = 0
-#         for char in string:
-#             if char == "(": 
-#                 current_depth += 1
-#             elif char == ")":
-#                 current_depth -= 1
-#             elif char in OPERATORS and current_depth == search_depth:
-#                 operator = char
-#                 break
+preprocessing
 
-#         search_depth += 1
-#     return operator
-    
+Only ANd, OR, Negation, no quantifiers, and and or take unlimited operands
+
+
+
+
+UNIT TESTS BEFORE CLEANING
+'''
+
+
+
 def find_main_operator(string):
     """
     Finds the outermost operator at depth 0.
@@ -102,36 +91,18 @@ class WFF:
                 self.type = UNARY_WFF
             else:
                 self.type = BINARY_WFF
-            
 
-            # def to_string(wff):
-            #     """
-            #     Build a string representation of the WFF
-            #     based on its operator and operands.
-            #     """
-            #     if wff.type == ATOMIC_WFF:
-            #         return wff.string if wff.string else "?"
-                
-            #     elif wff.type == UNARY_WFF:
-            #         return f"{wff.main_operator}{to_string(wff.operands[0])}"
-                
-            #     elif wff.type == BINARY_WFF:
-            #         left = to_string(wff.operands[0])
-            #         right = to_string(wff.operands[1])
-            #         return f"({left}{wff.main_operator}{right})"
-                
-            #     else:
-            #         return "<?>"
-            
-            # self.string = to_string(self)
-
-            
+            self.quantifier = None
 
         else:
+
+            self.quantifier = None
 
             #Need to remove wrapping parentheses
             string = strip_outer_parentheses(string.replace(" ", ""))
             self.string = string
+
+            self.detect_quantifier()
 
             # Main operator
             '''
@@ -170,35 +141,110 @@ class WFF:
                 # print(f"For this WFF: {self.string}.   \n\t main_operator = \t {self.main_operator} \n\t operands = \t {self.operands}")
                 pass
 
-    def __str__ (self):
+            self.domain = None
+
+    def detect_quantifier(self):
+        """
+        Detect if the WFF string begins with a quantifier (UNIVERSAL_Q or EXISTENTIAL_Q).
+        If found, store {'symbol': <quantifier>, 'variable': <var>} in self.quantifier
+        and remove it from self.string for further parsing.
+        """
+        # if len(self.string) < 2:
+        #     return  # too short to contain quantifier + variable
+
+        first_char = self.string[0]
+        if first_char in [UNIVERSAL_Q, EXISTENTIAL_Q]:
+            # assume next char is the variable (like ∀xP(x))
+            variable = self.string[1]
+
+            # basic sanity check (variables should be alphabetic)
+            if variable.isalpha():
+                self.quantifier = {"symbol": first_char, "variable": variable}
+                
+                # remove the quantifier and variable from the string
+                self.string = self.string[2:]
+
+                # optionally remove wrapping parentheses if they exist
+                self.string = strip_outer_parentheses(self.string)
+
+
+    def get_domain(self):
+        ''' Returns a list of all atoms in all sub-wffs'''
+        if self.domain: return self.domain
+
+
+        if self.type == ATOMIC_WFF:
+            string = repr(self)
+            domain = only_lowercase(string)
+        elif self.type == UNARY_WFF:
+            domain =  self.operands[0].get_domain()
+        else:
+            domain = self.operands[0].get_domain() + self.operands[1].get_domain()
+
+        return list(set(domain))
+    
+
+    # def set_domain(self):
+    #     domain = self.get_domain()
+
+    #     if self.type != ATOMIC_WFF:
+    #         for operand in self.operands:
+    #             operand.set_domain_helper(domain)
+
+
+    # def set_domain_helper(self, domain):
+    #     self.domain = domain
+    #     if self.type != ATOMIC_WFF:
+    #         for operand in self.operands:
+    #             operand.set_domain_helper(domain)
+            
+
+
+
+
+
+    def replace(self, to_replace, replacer):
+        if self.type == ATOMIC_WFF:
+            if to_replace in self.string:
+                self.string = self.string.replace(to_replace, replacer)
+        elif self.type == UNARY_WFF:
+            self.operands[0].replace(to_replace, replacer)
+        else:
+            self.operands[0].replace(to_replace, replacer)
+            self.operands[1].replace(to_replace, replacer)
+
+
+    def __str__ (self):        
+        return f"{START_BOLD}{repr(self)}{END_BOLD}"
+    
+        # return str(START_BOLD + self.string + END_BOLD)
+    
+    def __repr__ (self):
         string = ""
         if self.type == ATOMIC_WFF:
             string = self.string
         
         elif self.type == UNARY_WFF:
-            string =  f"{self.main_operator}{str(self.operands[0])}"
+            string =  f"{self.main_operator}({repr(self.operands[0])})"
         
         elif self.type == BINARY_WFF:
             if self.operands[0].type in [ATOMIC_WFF, UNARY_WFF]: 
-                left = str(self.operands[0])
+                left = repr(self.operands[0])
             else:
-                left = f"({str(self.operands[0])})"
+                left = f"({repr(self.operands[0])})"
             if self.operands[1].type in [ATOMIC_WFF, UNARY_WFF]: 
-                right = str(self.operands[1])
+                right = repr(self.operands[1])
             else:
-                right = f"({str(self.operands[1])})"
-            # right = str(self.operands[1])
-
-            
-
+                right = f"({repr(self.operands[1])})"
             string =  f"{left} {self.main_operator} {right}"
-        
-        return f"{START_BOLD}{string}{END_BOLD}"
-    
-        # return str(START_BOLD + self.string + END_BOLD)
-    
-    def __repr__ (self):
-        return (str(self))
+        # type(init_string)
+
+        self.string = string
+        if self.quantifier:
+            string = f"{self.quantifier["symbol"]}{self.quantifier["variable"]} [{string}]"
+        else:
+            self.string = string
+        return string
         # return str(START_BOLD + self.string + END_BOLD)
     
 
@@ -281,45 +327,78 @@ class WFF:
             op1_false = self.operands[0].made_false()
             op2_true = self.operands[1].made_true()
             return op1_false + op2_true
-
-
-
-
-
-
-
-
-# def strip_outer_parentheses(string):
-#     if string[0] != "(": return string
-#     if string[-1] != ")": return string
-    
-#     parentheses_counter = 0
-#     pc_has_left_zero = False
-
-#     for char in string[1:]:
-#         if char == "(": 
-#             parentheses_counter += 1
-#             pc_has_left_zero = True
-#         elif char == ")": 
-#             parentheses_counter -= 1
-#             pc_has_left_zero = True
-
-#         if pc_has_left_zero and parentheses_counter == 0:
-#             return string
+        
 
     
-#     if parentheses_counter == -1:
-#         return string[1:-1]
+    def expand_quantifers(self, domain):
+
+        if not self.type == ATOMIC_WFF:
+            for op in self.operands:
+                op.expand_quantifers(domain)
+
+        if self.quantifier:
+            # print(self.quantifier)
+            # domain = self.get_domain()
+
+            variable = self.quantifier["variable"]
+            quantifier = self.quantifier["symbol"]
+
+            if quantifier == UNIVERSAL_Q: joining_operator = AND
+            elif quantifier == EXISTENTIAL_Q: joining_operator = OR
+            else: raise NameError
+
+            # print(f"joining op {joining_operator}")
+
+            if variable in domain:
+                domain.remove(variable)
+
+            # print(f"domain: {domain}")
+
+            # Create the new wffs
+            new_wffs = []
+            # print(f"domain= {domain}")
+            for atom in domain:
+                # print(f"\t for {atom} in {domain}")
+                wff_copy = deepcopy(self)
+                # print(wff_copy, end = "->")
+                wff_copy.replace(variable, atom)
+                wff_copy.quantifier = None
+                # print(wff_copy)
+                new_wffs.append(wff_copy)
+            # print(f"newwffs: {new_wffs}")
+
+
+            # Join all the wffs into a larger one
+            # print(len(domain))
+            joined = list_to_WFF(new_wffs, joining_operator)
+            # print(f"joined {joined}")
+
+            if joined.type != ATOMIC_WFF:
+                self.operands = joined.operands
+            else:
+                self.string = joined.string
+
+            self.main_operator = joined.main_operator
+            self.quantifier = None
+            self.type = joined.type
+        
+        
+
+
+
+
+
+
 
 def strip_outer_parentheses(s: str) -> str:
-    if not s.startswith("(") or not s.endswith(")"):
+    if (not s.startswith("(") or not s.endswith(")")) and (not s.startswith("[") or not s.endswith("]")):
         return s
     
     depth = 0
     for i, ch in enumerate(s):
-        if ch == "(":
+        if ch == "(" or "[":
             depth += 1
-        elif ch == ")":
+        elif ch == ")" or "]":
             depth -= 1
             if depth == 0 and i != len(s) - 1:
                 # Outer parens do not wrap the whole string
@@ -331,3 +410,56 @@ def strip_outer_parentheses(s: str) -> str:
 
 
 
+
+
+def new_WFF(operator, operand1=None, operand2=None):
+    # print(f"new wff! {operator} {operand1} {operand2}")
+    ''' For creating a WFF from WFFs'''
+
+    if operand2:
+        wff = WFF(f"a {operator} b")
+        wff.operands = [operand1, operand2]
+        wff.type = BINARY_WFF
+    else:
+        wff = WFF(f"{operator} b")
+        wff.operands = [operand1]
+        wff.type = UNARY_WFF
+
+    return wff
+
+
+def list_to_WFF(list, operator):
+    '''
+    Takes a list of WFFS and returns them all joined by the operator
+    '''
+    # if len(list) == 0: return None
+    if len(list) == 1: return list[0]
+
+    head = list[0]
+    rest = list[1:]
+
+    return list_to_WFF_helper(head, rest, operator)
+
+
+
+def list_to_WFF_helper(head, rest, operator):
+    # print(f"head {head}, rest {rest}, operator {operator}")
+
+    if len(rest) > 1:
+        operand2 = list_to_WFF_helper(rest[0], rest[1:], operator)
+    else:
+        operand2 = rest[0]
+
+
+
+    result = new_WFF(operator, head, operand2)
+    
+    return result
+
+
+def only_lowercase(str):
+    result = ""
+    for char in str:
+        if char.islower():
+            result += char
+    return result

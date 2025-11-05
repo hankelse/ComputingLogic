@@ -204,31 +204,79 @@ def get_folio_data():
 import re
 import string
 
-def compress_fol(expression, existing_map=None):
-    # Fresh pools for each call
-    pred_pool = iter(string.ascii_uppercase)  # A, B, C...
-    term_pool = iter(string.ascii_lowercase)  # a, b, c...
+# def compress_fol(expression, existing_map=None):
+#     # Fresh pools for each call
+#     pred_pool = iter(string.ascii_uppercase)  # A, B, C...
+#     term_pool = iter(string.ascii_lowercase)  # a, b, c...
 
-    # Split existing map into predicate + term mappings
+#     # Split existing map into predicate + term mappings
+#     pred_map, term_map = {}, {}
+#     if existing_map:
+#         for k, v in existing_map.items():
+#             if k[0].isupper():   # predicates
+#                 pred_map[v] = k
+#             else:                # terms
+#                 term_map[v] = k
+
+#     # Functions to get or assign new symbols
+#     def get_pred(sym):
+#         if sym not in pred_map:
+#             nxt = next(pred_pool)
+#             # Skip symbols already used
+#             while nxt in pred_map.values():
+#                 nxt = next(pred_pool)
+#             pred_map[sym] = nxt
+#         return pred_map[sym]
+
+#     def get_term(sym):
+#         if sym not in term_map:
+#             nxt = next(term_pool)
+#             while nxt in term_map.values():
+#                 nxt = next(term_pool)
+#             term_map[sym] = nxt
+#         return term_map[sym]
+
+#     # Regex to find predicates with arguments
+#     pattern = re.compile(r'(\w+)\(([^()]*)\)')
+
+#     def replacer(match):
+#         pred = match.group(1)
+#         args = [arg.strip() for arg in match.group(2).split(",")]
+#         return get_pred(pred) + "".join(get_term(a) for a in args)
+
+#     compressed_expr = pattern.sub(replacer, expression)
+
+#     # Build combined map (inverse of pred_map/term_map)
+#     full_map = {v: k for k, v in pred_map.items()}
+#     full_map.update({v: k for k, v in term_map.items()})
+
+#     return compressed_expr, full_map
+
+def compress_fol(expression, existing_map=None):
+    pred_pool = iter(string.ascii_uppercase)
+    term_pool = iter(string.ascii_lowercase)
+
     pred_map, term_map = {}, {}
+    bound_vars = set()
+
     if existing_map:
         for k, v in existing_map.items():
-            if k[0].isupper():   # predicates
+            if k[0].isupper():
                 pred_map[v] = k
-            else:                # terms
+            else:
                 term_map[v] = k
 
-    # Functions to get or assign new symbols
     def get_pred(sym):
         if sym not in pred_map:
             nxt = next(pred_pool)
-            # Skip symbols already used
             while nxt in pred_map.values():
                 nxt = next(pred_pool)
             pred_map[sym] = nxt
         return pred_map[sym]
 
     def get_term(sym):
+        if sym in bound_vars:
+            return sym  # keep bound variables as-is
         if sym not in term_map:
             nxt = next(term_pool)
             while nxt in term_map.values():
@@ -236,9 +284,11 @@ def compress_fol(expression, existing_map=None):
             term_map[sym] = nxt
         return term_map[sym]
 
-    # Regex to find predicates with arguments
-    pattern = re.compile(r'(\w+)\(([^()]*)\)')
+    # Detect bound variables (quantifiers)
+    for match in re.finditer(r'[∀∃]\s*([a-z])', expression):
+        bound_vars.add(match.group(1))
 
+    pattern = re.compile(r'(\w+)\(([^()]*)\)')
     def replacer(match):
         pred = match.group(1)
         args = [arg.strip() for arg in match.group(2).split(",")]
@@ -246,7 +296,6 @@ def compress_fol(expression, existing_map=None):
 
     compressed_expr = pattern.sub(replacer, expression)
 
-    # Build combined map (inverse of pred_map/term_map)
     full_map = {v: k for k, v in pred_map.items()}
     full_map.update({v: k for k, v in term_map.items()})
 
