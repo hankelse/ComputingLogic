@@ -8,7 +8,7 @@ and a Conclusion:
 Return if the premise follows from the conclusions
 """
 
-from WFF import WFF
+from cnfWFFs import WFF
 
 
 

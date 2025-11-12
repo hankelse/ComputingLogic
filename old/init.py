@@ -1,11 +1,11 @@
 from get_data import get_folio_data, relabel_folio_data, reshape_data
-from constants import VALID, INVALID, NOT, OR, AND, IMPLIES, UNIVERSAL_Q, EXISTENTIAL_Q, XOR
+from testing import run_tests
+from pprint import pprint
+from constants import VALID, INVALID, NOT, OR, AND, IMPLIES, UNIVERSAL_Q, EXISTENTIAL_Q
 import itertools
+from cnfWFFs import WFF
 
 from cnf import to_cnf
-
-from itertools import chain
-
 
 
 def brute_force_validity(premises, conclusion):
@@ -51,9 +51,6 @@ from cnfWFFs import list_to_WFF
 from cnfWFFs import new_WFF
 from sat_solving import check_argument_validity
 
-from strictWFFs import string_to_WFF as string_to_strict_WFF
-from strictWFFs import StrictWFF, eliminate_implications, eliminate_xor
-
 
 def main():
     # Get foilio data
@@ -65,90 +62,30 @@ def main():
     # Relabel maps
     labels = relabel_folio_data(labels)
 
-    premises = ["∃x [Cx]", "a", f"a {IMPLIES }b", f"c {XOR} b"]
-    conclusion = f"∃x Cx"
+    # premises = ["∃x [Cx]", "a", "b", "c"]
+    # conclusion = f"∃x Cx"
 
-    arguments = [(premises, conclusion)]
+    # arguments = [(premises, conclusion)]
     for i, arg in enumerate(arguments):
         premises_raw = arg[0]
         conclusion_raw = arg[1]
         print(f"Input: Premises:{premises_raw} Conclusion {conclusion_raw}")
 
-        # if any("⊕" in p for p in premises_raw) or "⊕" in conclusion_raw:
-        #     continue
+        if any("⊕" in p for p in premises_raw) or "⊕" in conclusion_raw:
+            continue
 
 
         # --- Convert strings to WFF objects ---
-        premises = [string_to_strict_WFF(p) for p in premises_raw]
-        conclusion = string_to_strict_WFF(conclusion_raw)
-        
+        premises = [WFF(p) for p in premises_raw]
+        conclusion = WFF(conclusion_raw)
 
         print("\n" + "="*60)
         print(f"Argument #{i+1}")
         print("-"*60)
         print("Premises:")
-        for p in premises:
-            print(f"  {p}") #\n\t {p.type} \n\t {p.operator} \n\t {p.quantifier} \n\t {p.operand1, p.operand2}
-        print(f"Conclusion: {conclusion}")
-
-
-        # ======= Getting Domain and Eliminating Quantifiers ====== #
-
-        # collect all domain symbols (lowercase identifiers) from premises and conclusion
-        premise_domains = list(chain.from_iterable(p.get_domain() for p in premises))
-        conclusion_domain = conclusion.get_domain()
-
-        # unify and deduplicate
-        domain = sorted(set(premise_domains + conclusion_domain))
-
-        print(f"\nDomain: {domain}")
-
-
-        for p in premises:
-            p.expand_quantifiers(domain)
-        conclusion.expand_quantifiers(domain)
-
-        print("\nExpanded Premises:")
         for p in premises:
             print(f"  {p}")
-
-        print(f"Expanded Conclusion: {conclusion}")
-
-        # ======= REMOVING IMPLICATIONS AND XORs ====== #
-
-        print("\nSimplifying WFFs (eliminating →, ↔, and ⊕)")
-        simplified_premises = []
-        for p in premises:
-            print(f"  Original: {p}")
-            no_imp = eliminate_implications(p)
-            no_xor = eliminate_xor(no_imp)
-            simplified_premises.append(no_xor)
-            print(f"  Simplified: {no_xor}\n")
-
-        # Simplify the conclusion too
-        print("Simplifying conclusion...")
-        no_imp_conc = eliminate_implications(conclusion)
-        no_xor_conc = eliminate_xor(no_imp_conc)
-        simplified_conclusion = no_xor_conc
-        print(f"  Original conclusion: {conclusion}")
-        print(f"  Simplified conclusion: {simplified_conclusion}\n")
-
-        # Replace old WFFs with simplified versions
-        premises = simplified_premises
-        conclusion = simplified_conclusion
-
-        print("\n" + "="*60)
-        print(f"Argument #{i+1}")
-        print("-"*60)
-        print("Premises:")
-        for p in premises:
-            print(f"  {p}") #\n\t {p.type} \n\t {p.operator} \n\t {p.quantifier} \n\t {p.operand1, p.operand2}
         print(f"Conclusion: {conclusion}")
-
-        break
-
-    
-
 
         # --- Combine premises into single WFF ---
         premises_WFF = list_to_WFF(premises, AND)
