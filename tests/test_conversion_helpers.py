@@ -1,14 +1,14 @@
 import unittest
-from strictWFFs import StrictWFF, string_to_WFF
+from WFFs.strictWFFs import StrictWFF, string_to_WFF
 
 
-from WFF_conversion import (
+from WFFs.WFF_conversion import (
     eliminate_implications,
     eliminate_xor,
     eliminate_double_negation,
     demorgans,
     distribute_or_over_and,
-    to_cnf,
+    convert_to_cnf_wff,
     strict_to_cnf
 )
 
@@ -94,44 +94,45 @@ class TestDeMorgans(unittest.TestCase):
 class TestDistributeOrOverAnd(unittest.TestCase):
 
     def test_simple_distribution_left(self):
-        A = string_to_WFF("P")
-        right = string_to_WFF("(Q∧R)")
-        result = distribute_or_over_and(A, right)
+        # A ∨ (Q ∧ R) → (A ∨ Q) ∧ (A ∨ R)
+        wff = string_to_WFF("(P∨(Q∧R))")
+        result = distribute_or_over_and(wff)
         expected = string_to_WFF("((P∨Q)∧(P∨R))")
         self.assertEqual(repr(result), repr(expected))
 
     def test_simple_distribution_right(self):
-        left = string_to_WFF("(Q∧R)")
-        B = string_to_WFF("P")
-        result = distribute_or_over_and(left, B)
+        # (Q ∧ R) ∨ B → (Q ∨ B) ∧ (R ∨ B)
+        wff = string_to_WFF("((Q∧R)∨P)")
+        result = distribute_or_over_and(wff)
         expected = string_to_WFF("((Q∨P)∧(R∨P))")
         self.assertEqual(repr(result), repr(expected))
 
     def test_no_distribution_needed(self):
-        A = string_to_WFF("P")
-        B = string_to_WFF("Q")
-        result = distribute_or_over_and(A, B)
+        # P ∨ Q (no AND to distribute)
+        wff = string_to_WFF("(P∨Q)")
+        result = distribute_or_over_and(wff)
         expected = string_to_WFF("(P∨Q)")
         self.assertEqual(repr(result), repr(expected))
+
 
 
 class TestToCnf(unittest.TestCase):
 
     def test_simple_cnf_no_change(self):
         wff = string_to_WFF("(P∧Q)")
-        result = to_cnf(wff)
+        result = convert_to_cnf_wff(wff)
         expected = string_to_WFF("(P∧Q)")
         self.assertEqual(repr(result), repr(expected))
 
     def test_or_over_and(self):
         wff = string_to_WFF("(P∨(Q∧R))")
-        result = to_cnf(wff)
+        result = convert_to_cnf_wff(wff)
         expected = string_to_WFF("((P∨Q)∧(P∨R))")
         self.assertEqual(repr(result), repr(expected))
 
     def test_nested_or_over_and(self):
         wff = string_to_WFF("((P∨Q)∨(R∧S))")
-        result = to_cnf(wff)
+        result = convert_to_cnf_wff(wff)
         expected = string_to_WFF("(((P∨Q∨R)∧(P∨Q∨S)))")
         self.assertTrue("∧" in repr(result))
 

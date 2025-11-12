@@ -1,5 +1,5 @@
 import unittest
-from cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
+from WFFs.cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
 from constants import AND, OR, NOT, ATOMIC_WFF, UNARY_WFF
 
 
@@ -141,6 +141,8 @@ class TestComplexStructures(unittest.TestCase):
         )
         self.assertIn("∧", repr(cnf))
         self.assertIn("∨", repr(cnf))
+
+
 
 
 if __name__ == "__main__":

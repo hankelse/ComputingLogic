@@ -1,4 +1,4 @@
-from cnfWFFs import WFF, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
+from WFFs.cnfWFFs import WFF, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
 from constants import IMPLIES, AND, OR, NOT
 
 '''

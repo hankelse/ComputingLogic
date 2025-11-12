@@ -1,8 +1,8 @@
 import unittest
-from strictWFFs import StrictWFF
-from cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
+from WFFs.strictWFFs import StrictWFF
+from WFFs.cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
 from constants import AND, OR, NOT, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
-from WFF_conversion import strict_to_cnf, convert_to_cnf_wff  # your file/module name here
+from WFFs.WFF_conversion import strict_to_cnf, convert_to_cnf_wff  # your file/module name here
 
 # These helper functions must exist in the same namespace:
 # eliminate_implications, eliminate_xor, eliminate_double_negation,

@@ -3,7 +3,7 @@ from testing import run_tests
 from pprint import pprint
 from constants import VALID, INVALID, NOT, OR, AND, IMPLIES, UNIVERSAL_Q, EXISTENTIAL_Q
 import itertools
-from cnfWFFs import WFF
+from WFFs.cnfWFFs import WFF
 
 from cnf import to_cnf
 
@@ -47,8 +47,8 @@ def brute_force_validity(premises, conclusion):
     return True
 
 from copy import deepcopy
-from cnfWFFs import list_to_WFF
-from cnfWFFs import new_WFF
+from WFFs.cnfWFFs import list_to_WFF
+from WFFs.cnfWFFs import new_WFF
 from sat_solving import check_argument_validity
 
 

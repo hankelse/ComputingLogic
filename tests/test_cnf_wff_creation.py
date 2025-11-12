@@ -1,5 +1,5 @@
 import unittest
-from cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
+from WFFs.cnfWFFs import CnfWFF, CONJUNCTIVE_WFF, DISJUNCTIVE_WFF
 from constants import AND, OR, NOT, ATOMIC_WFF, UNARY_WFF
 
 
@@ -51,6 +51,16 @@ class TestCNFDepthAndStructure(unittest.TestCase):
         self.assertEqual(clause3.type, DISJUNCTIVE_WFF)
         # Flattened: 5 atoms in one disjunction
         self.assertEqual(len(clause3.operands), 5)
+
+    def test_negate_cnf_structures(self):
+        A = CnfWFF(atom="a")
+        B = CnfWFF(atom="b")
+        conj = CnfWFF(operator=AND, operands=[A, B])
+        disj = CnfWFF(operator=OR, operands=[A, B])
+        self.assertEqual(str(conj.negate()), "(~a ∨ ~b)")
+        self.assertEqual(str(disj.negate()), "(~a ∧ ~b)")
+        self.assertEqual(str(A.negate()), "~a")
+        self.assertEqual(str(A.negate().negate()), "a")
 
     def test_depth_5_nested_conjunction_is_flattened(self):
         # ((((A ∧ B) ∧ C) ∧ D) ∧ E) should flatten automatically

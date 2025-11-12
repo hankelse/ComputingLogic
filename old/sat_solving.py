@@ -3,7 +3,7 @@ from testing import run_tests
 from pprint import pprint
 from constants import VALID, INVALID, NOT, OR, AND, IMPLIES
 import itertools
-from cnfWFFs import WFF
+from WFFs.cnfWFFs import WFF
 from cnf import to_cnf
 
 
@@ -19,7 +19,7 @@ def get_var(symbol: str, varmap: dict, counter: list) -> int:
         counter[0] += 1
     return varmap[symbol]
 
-from cnfWFFs import WFF, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
+from WFFs.cnfWFFs import WFF, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
 from constants import AND, OR, NOT
 
 def wff_to_clauses(wff: WFF, varmap: dict, counter: list) -> list[list[int]]:
@@ -68,7 +68,7 @@ def cnf_clauses_from_wff(wff: WFF):
 
 # --- Convert CNF WFF to PySAT format ---
 def cnf_to_clauses(wff, varmap=None, counter=None):
-    from cnfWFFs import ATOMIC_WFF, UNARY_WFF, BINARY_WFF
+    from WFFs.cnfWFFs import ATOMIC_WFF, UNARY_WFF, BINARY_WFF
     from constants import AND, OR, NOT
 
     if varmap is None:
@@ -146,7 +146,7 @@ def solve_with_sat(wff: WFF):
 # FROM WFFS
 
 from constants import AND, NOT
-from cnfWFFs import WFF
+from WFFs.cnfWFFs import WFF
 from cnf import to_cnf
 from pysat.solvers import Glucose3
 

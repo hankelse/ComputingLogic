@@ -2,8 +2,8 @@
 from constants import QuantifierType, OperatorType, UnaryOperator, BinaryOperator, ATOMIC_WFF, UNARY_WFF, BINARY_WFF, QUANTIFIER_WFF
 from constants import UNARY_OPERATORS, BINARY_OPERATORS, UNIVERSAL_Q, EXISTENTIAL_Q, AND, OR, NOT
 
-from strictWFFs import StrictWFF
-from cnfWFFs import CnfWFF
+from WFFs.strictWFFs import StrictWFF
+from WFFs.cnfWFFs import CnfWFF
 
 
 # === Expanding Arguments === #
@@ -20,15 +20,23 @@ def strict_to_cnf(wff: StrictWFF) -> CnfWFF:
     4. Push negations inward (De Morgan)
     5. Distribute OR over AND
     """
-    step1 = eliminate_implications(wff)
-    step2 = eliminate_xor(step1)
-    step3 = eliminate_double_negation(step2)
-    step4 = demorgans(step3)
-    step5 = distribute_or_over_and(step4)
+    # --- Normalize before CNF ---
+    wff = eliminate_implications(wff)
+    wff = eliminate_xor(wff)
+    wff = eliminate_double_negation(wff)
+    wff = demorgans(wff)  # push negations inside first
+    wff = distribute_or_over_and(wff)
 
-    # Convert to cnf wff
-    cnf_wff = convert_to_cnf_wff(step5)
+    # --- Convert to CNF WFF ---
+    cnf_wff = convert_to_cnf_wff(wff)
+    cnf_wff = _normalize_cnf_negations(cnf_wff)
+    if cnf_wff.operator == AND:
+        cnf_wff = CnfWFF(operator=AND, operands=cnf_wff.flatten_conjunctions())
 
+    # --- Extra normalization: ensure all negations are on atoms ---
+    if cnf_wff.type not in ("atomic_wff",):
+        # recursively push negations in CNF too
+        cnf_wff = _normalize_cnf_negations(cnf_wff)
 
     return cnf_wff
 
@@ -102,6 +110,34 @@ def distribute_or_over_and(wff: StrictWFF) -> StrictWFF:
 
 
 # Helper functions
+
+def _normalize_cnf_negations(cnf: CnfWFF) -> CnfWFF:
+    """Ensure CNF only contains negations on atoms."""
+    from constants import NOT, AND, OR
+    if cnf.operator == NOT and cnf.operands:
+        inner = cnf.operands[0]
+        if inner.operator == OR:
+            # ¬(A∨B) => (¬A ∧ ¬B)
+            return CnfWFF(operator=AND, operands=[
+                _normalize_cnf_negations(CnfWFF(operator=NOT, operands=[inner.operands[0]])),
+                _normalize_cnf_negations(CnfWFF(operator=NOT, operands=[inner.operands[1]])),
+            ])
+        elif inner.operator == AND:
+            # ¬(A∧B) => (¬A ∨ ¬B)
+            return CnfWFF(operator=OR, operands=[
+                _normalize_cnf_negations(CnfWFF(operator=NOT, operands=[inner.operands[0]])),
+                _normalize_cnf_negations(CnfWFF(operator=NOT, operands=[inner.operands[1]])),
+            ])
+        return cnf
+
+    if cnf.operator in (AND, OR):
+        return CnfWFF(operator=cnf.operator, operands=[
+            _normalize_cnf_negations(op) for op in cnf.operands
+        ])
+
+    return cnf
+
+
 def eliminate_implications(wff: StrictWFF) -> StrictWFF:
     """
     Recursively eliminate → and ↔ from a StrictWFF.
@@ -166,20 +202,16 @@ def eliminate_xor(wff: StrictWFF) -> StrictWFF:
     raise ValueError(f"Unknown WFF type: {wff.type}")
 
 def eliminate_double_negation(wff: StrictWFF) -> StrictWFF:
-    """
-    Recursively removes all instances of double negation:
-      ¬(¬A)  →  A
-    """
+    """Recursively removes all double negations: ¬(¬A) → A."""
     if wff.type == ATOMIC_WFF:
         return StrictWFF(atom=wff.atom)
 
-    if wff.type == UNARY_WFF:
+    if wff.type == UNARY_WFF and wff.operator == NOT:
         inner = eliminate_double_negation(wff.operand1)
-        # If it's a double negation
-        if wff.operator == "~" and inner.type == UNARY_WFF and inner.operator == "~":
+        # double negation
+        if inner.type == UNARY_WFF and inner.operator == NOT:
             return eliminate_double_negation(inner.operand1)
-        else:
-            return StrictWFF(operator=wff.operator, operand1=inner)
+        return StrictWFF(operator=NOT, operand1=inner)
 
     if wff.type == BINARY_WFF:
         left = eliminate_double_negation(wff.operand1)
@@ -189,42 +221,55 @@ def eliminate_double_negation(wff: StrictWFF) -> StrictWFF:
     return wff
 
 # Below are 3 functions from an old type just called WFF which functioned slightly differently
+from constants import AND, OR, NOT, ATOMIC_WFF, UNARY_WFF, BINARY_WFF
+from WFFs.strictWFFs import StrictWFF
+
 def demorgans(wff: StrictWFF) -> StrictWFF:
     """
-    Applies De Morgan’s laws and pushes negations down to atomic level.
+    Applies De Morgan’s laws and pushes negations to atomic level.
       ¬(A ∧ B) → (¬A ∨ ¬B)
       ¬(A ∨ B) → (¬A ∧ ¬B)
       ¬¬A → A
     """
+    # Atomic formula — nothing to do
     if wff.type == ATOMIC_WFF:
         return wff
 
     # --- Negation case ---
-    if wff.type == UNARY_WFF and wff.operator == "~":
+    if wff.type == UNARY_WFF and wff.operator == NOT:
         inner = demorgans(wff.operand1)
 
-        # Double negation
-        if inner.type == UNARY_WFF and inner.operator == "~":
-            return demorgans(inner.operand1)
-
-        # De Morgan’s transformations
+        # After applying a rule, recurse again to ensure inner parts are processed
         if inner.type == BINARY_WFF:
-            if inner.operator == "∧":
-                new_op = "∨"
-            elif inner.operator == "∨":
-                new_op = "∧"
-            else:
-                # If it’s not AND or OR, just return the negation as is
-                return StrictWFF(operator="~", operand1=inner)
+            if inner.operator == AND:
+                return demorgans(
+                    StrictWFF(operator=OR,
+                            operand1=StrictWFF(operator=NOT, operand1=inner.operand1),
+                            operand2=StrictWFF(operator=NOT, operand1=inner.operand2))
+                )
+            elif inner.operator == OR:
+                return demorgans(
+                    StrictWFF(operator=AND,
+                            operand1=StrictWFF(operator=NOT, operand1=inner.operand1),
+                            operand2=StrictWFF(operator=NOT, operand1=inner.operand2))
+                )
 
-            not_left = StrictWFF(operator="~", operand1=inner.operand1)
-            not_right = StrictWFF(operator="~", operand1=inner.operand2)
-            return StrictWFF(operator=new_op,
-                              operand1=demorgans(not_left),
-                              operand2=demorgans(not_right))
+        # Handle ¬(A ∧ B) and ¬(A ∨ B)
+        if inner.type == BINARY_WFF:
+            a, b = inner.operand1, inner.operand2
+            if inner.operator == AND:
+                # ¬(A ∧ B) → (¬A ∨ ¬B)
+                return StrictWFF(operator=OR,
+                                 operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
+                                 operand2=demorgans(StrictWFF(operator=NOT, operand1=b)))
+            elif inner.operator == OR:
+                # ¬(A ∨ B) → (¬A ∧ ¬B)
+                return StrictWFF(operator=AND,
+                                 operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
+                                 operand2=demorgans(StrictWFF(operator=NOT, operand1=b)))
 
-        # Atomic negation
-        return StrictWFF(operator="~", operand1=inner)
+        # Otherwise, it's ¬Atom
+        return StrictWFF(operator=NOT, operand1=inner)
 
     # --- Binary case ---
     if wff.type == BINARY_WFF:
@@ -233,6 +278,7 @@ def demorgans(wff: StrictWFF) -> StrictWFF:
         return StrictWFF(operator=wff.operator, operand1=left, operand2=right)
 
     return wff
+
 
 def distribute_or_over_and_helper(left: StrictWFF, right: StrictWFF) -> StrictWFF:
     """

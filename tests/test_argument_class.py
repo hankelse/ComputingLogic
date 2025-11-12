@@ -1,9 +1,9 @@
 import unittest
 
 from argument import Argument
-from strictWFFs import StrictWFF, string_to_WFF
-from cnfWFFs import CnfWFF
-from WFF_conversion import strict_to_cnf
+from WFFs.strictWFFs import StrictWFF, string_to_WFF
+from WFFs.cnfWFFs import CnfWFF
+from WFFs.WFF_conversion import strict_to_cnf
 from constants import AND, OR, NOT
 
 
@@ -19,7 +19,7 @@ class TestArgumentInitialization(unittest.TestCase):
             premises=["P→Q", "P"],
             conclusion="Q"
         )
-        self.assertEqual(arg.form_type, "strict")
+        self.assertEqual(arg._form_type, "strict")
         self.assertEqual(len(arg.premises), 2)
         self.assertIsInstance(arg.premises[0], StrictWFF)
         self.assertIsInstance(arg.conclusion, StrictWFF)
@@ -31,7 +31,7 @@ class TestArgumentInitialization(unittest.TestCase):
         p2 = string_to_WFF("P")
         c = string_to_WFF("Q")
         arg = Argument([p1, p2], c)
-        self.assertEqual(arg.form_type, "strict")
+        self.assertEqual(arg._form_type, "strict")
         self.assertTrue(all(isinstance(p, StrictWFF) for p in arg.premises))
 
     def test_create_from_cnfWFF_objects(self):
@@ -40,7 +40,7 @@ class TestArgumentInitialization(unittest.TestCase):
         p2 = CnfWFF(atom="P")
         c = CnfWFF(atom="Q")
         arg = Argument([p1, p2], c)
-        self.assertEqual(arg.form_type, "cnf")
+        self.assertEqual(arg._form_type, "cnf")
         self.assertTrue(all(isinstance(p, CnfWFF) for p in arg.premises))
 
     def test_mixed_types_raises_error(self):
@@ -110,7 +110,7 @@ class TestCNFConversion(unittest.TestCase):
         arg = Argument(["P→Q", "P"], "Q")
         cnf_arg = arg.to_cnf()
 
-        self.assertEqual(cnf_arg.form_type, "cnf")
+        self.assertEqual(cnf_arg._form_type, "cnf")
         self.assertTrue(all(isinstance(p, CnfWFF) for p in cnf_arg.premises))
         repr_str = repr(cnf_arg)
         self.assertIn("∨", repr_str)

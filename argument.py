@@ -4,9 +4,11 @@ A class for arguments, the main class interacted with from users
 
 # argument.py
 from typing import List, Union
-from strictWFFs import StrictWFF, string_to_WFF
-from cnfWFFs import CnfWFF
-from WFF_conversion import strict_to_cnf
+from WFFs.strictWFFs import StrictWFF, string_to_WFF
+from WFFs.cnfWFFs import CnfWFF
+from WFFs.WFF_conversion import strict_to_cnf
+from sat_solving import solve_argument
+
 
 
 class Argument:
@@ -32,11 +34,33 @@ class Argument:
         premise_types.add(type(self.conclusion))
 
         if premise_types == {StrictWFF}:
-            self.form_type = "strict"
+            self._form_type = "strict"
         elif premise_types == {CnfWFF}:
-            self.form_type = "cnf"
+            self._form_type = "cnf"
         else:
             raise TypeError("All formulas in an Argument must be either all StrictWFF or all CnfWFF.")
+    
+    def solve(self) -> tuple[bool, dict]:
+        """
+        Uses PySAT to determine if the argument is valid.
+        Returns:
+            (is_valid, model)
+        - is_valid: True if argument is logically valid (premises entail conclusion)
+        - model: counterexample (dict) if invalid
+        """
+        return solve_argument(self)
+    
+    # ==========================================================
+    # --- Internal type checking ---
+    # ==========================================================
+
+    def is_strict(self) -> bool:
+        """Returns True if this argument contains StrictWFF objects."""
+        return self._form_type == "strict"
+
+    def is_cnf(self) -> bool:
+        """Returns True if this argument contains CnfWFF objects."""
+        return self._form_type == "cnf"
 
     # ==========================================================
     # --- Internal normalization helper ---
@@ -60,7 +84,7 @@ class Argument:
         Expands all quantifiers in premises and conclusion (if StrictWFFs).
         Mutates the internal formulas.
         """
-        if self.form_type != "strict":
+        if self._form_type != "strict":
             raise TypeError("Quantifier expansion only applies to StrictWFF arguments.")
 
         for p in self.premises:
@@ -72,13 +96,14 @@ class Argument:
         Converts all StrictWFFs into CNFWFFs.
         Returns a new Argument in CNF form.
         """
-        if self.form_type == "cnf":
+        if self._form_type == "cnf":
             return self  # already CNF
 
         cnf_premises = [strict_to_cnf(p) for p in self.premises]
         cnf_conclusion = strict_to_cnf(self.conclusion)
         return Argument(cnf_premises, cnf_conclusion)
 
+    
     # ==========================================================
     # --- Representation ---
     # ==========================================================

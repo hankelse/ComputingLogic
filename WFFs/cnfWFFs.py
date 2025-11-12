@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import Optional, List, Literal
 from copy import deepcopy
 
+from constants import AND, OR, NOT
+
 from constants import AND, OR, NOT, ATOMIC_WFF, UNARY_WFF
 
 
@@ -149,6 +151,41 @@ class CnfWFF:
     # --- CNF Utilities ---
     # ==========================================================
 
+
+    def negate(self) -> "CnfWFF":
+        """
+        Returns the negation of this CNF WFF as a new CnfWFF.
+        
+        Applies De Morgan’s laws and pushes negations down:
+            ¬(A ∧ B) → (¬A ∨ ¬B)
+            ¬(A ∨ B) → (¬A ∧ ¬B)
+            ¬¬A → A
+            ¬A (atomic) → A
+        """
+        # --- Base case: atomic or simple negation ---
+        if self.type == "atomic_wff":
+            return CnfWFF(operator=NOT, operands=[self])
+        if self.operator == NOT:
+            # Double negation: ¬¬A → A
+            return self.operands[0]
+
+        # --- Recursive cases for binary connectives ---
+        if self.operator == AND:
+            # ¬(A ∧ B) → (¬A ∨ ¬B)
+            left_neg = self.operands[0].negate()
+            right_neg = self.operands[1].negate()
+            return CnfWFF(operator=OR, operands=[left_neg, right_neg])
+
+        if self.operator == OR:
+            # ¬(A ∨ B) → (¬A ∧ ¬B)
+            left_neg = self.operands[0].negate()
+            right_neg = self.operands[1].negate()
+            return CnfWFF(operator=AND, operands=[left_neg, right_neg])
+
+        # --- Fallback for other or unknown types ---
+        return CnfWFF(operator=NOT, operands=[self])
+
+
     def flatten_conjunctions(self) -> List[CnfWFF]:
         """Return a flat list of disjunctive clauses."""
         if self.type == CONJUNCTIVE_WFF:
@@ -197,3 +234,28 @@ class CnfWFF:
             return [[lit for lit in self.get_literals()]]
         else:
             raise ValueError("Invalid CNF WFF structure.")
+
+    def to_strict(self):
+        """
+        Convert this CNF WFF into a StrictWFF-equivalent structure for transformation.
+        Useful for applying negation or implication elimination.
+        """
+        from WFFs.strictWFFs import StrictWFF
+
+        if self.type == ATOMIC_WFF:
+            return StrictWFF(atom=self.atom)
+        if self.type == UNARY_WFF:
+            return StrictWFF(operator=NOT, operand1=self.operands[0].to_strict())
+        if self.type == DISJUNCTIVE_WFF:
+            assert len(self.operands) >= 2
+            left = self.operands[0].to_strict()
+            right = CnfWFF(operator=self.operator, operands=self.operands[1:]).to_strict() \
+                if len(self.operands) > 2 else self.operands[1].to_strict()
+            return StrictWFF(operator=self.operator, operand1=left, operand2=right)
+        if self.type == CONJUNCTIVE_WFF:
+            assert len(self.operands) >= 2
+            left = self.operands[0].to_strict()
+            right = CnfWFF(operator=self.operator, operands=self.operands[1:]).to_strict() \
+                if len(self.operands) > 2 else self.operands[1].to_strict()
+            return StrictWFF(operator=self.operator, operand1=left, operand2=right)
+        raise ValueError(f"Unsupported CNF WFF type in to_strict: {self.type}")

@@ -1,251 +1,100 @@
-from get_data import get_folio_data, relabel_folio_data, reshape_data
-from constants import VALID, INVALID, NOT, OR, AND, IMPLIES, UNIVERSAL_Q, EXISTENTIAL_Q, XOR
-import itertools
-
-from cnf import to_cnf
-
 from itertools import chain
+from get_data import get_folio_data, reshape_data, relabel_folio_data
+from argument import Argument
+from WFFs.WFF_conversion import strict_to_cnf 
+from constants import VALID, INVALID
 
-
-
-def brute_force_validity(premises, conclusion):
-    # Collect all atoms (like Aa, Bb, etc.)
-    def collect_atoms(expr):
-        return set(token for token in expr.replace("(", " ").replace(")", " ").split()
-                   if token and token[0].isalpha() and token not in ["∀x", "∃x"])
-    
-    atoms = set()
-    for prem in premises:
-        atoms |= collect_atoms(prem)
-    atoms |= collect_atoms(conclusion)
-    atoms = sorted(atoms)
-
-    # Truth table evaluator
-    def eval_expr(expr, valuation):
-        # Replace atoms with truth values
-        s = expr
-        for a in atoms:
-            s = s.replace(a, str(valuation[a]))
-        # Replace logical symbols with Python equivalents
-        s = (s.replace("¬", " not ")
-               .replace("∧", " and ")
-               .replace("∀", " or ")
-               .replace("→", " <= ")  # We'll handle implication separately
-               .replace("⊕", " != "))
-        # Handle implication manually (since "→" isn't native)
-        while "->" in s:  # if you had "->", but your symbols are "→"
-            pass
-        # Evaluate safely
-        return eval(s)
-
-    # Try all valuations
-    for values in itertools.product([False, True], repeat=len(atoms)):
-        valuation = dict(zip(atoms, values))
-        if all(eval_expr(p, valuation) for p in premises):
-            if not eval_expr(conclusion, valuation):
-                return False  # counterexample found
-    return True
-
-from copy import deepcopy
-from cnfWFFs import list_to_WFF
-from cnfWFFs import new_WFF
-from sat_solving import check_argument_validity
-
-from strictWFFs import string_to_WFF as string_to_strict_WFF
-from strictWFFs import StrictWFF, eliminate_implications, eliminate_xor
+# Toggle verbosity here
+VERBOSE_MODE = False
 
 
 def main():
-    # Get foilio data
+    # === 1. Load and prepare dataset ===
     f_data = get_folio_data()
-
-    # Format data
     arguments, labels, maps = reshape_data(f_data)
-
-    # Relabel maps
     labels = relabel_folio_data(labels)
 
-    premises = ["∃x [Cx]", "a", f"a {IMPLIES }b", f"c {XOR} b"]
-    conclusion = f"∃x Cx"
+    # === 2. Process and evaluate arguments ===
+    total, correct = 0, 0
 
-    arguments = [(premises, conclusion)]
-    for i, arg in enumerate(arguments):
-        premises_raw = arg[0]
-        conclusion_raw = arg[1]
-        print(f"Input: Premises:{premises_raw} Conclusion {conclusion_raw}")
+    for i, (premises_raw, conclusion_raw) in enumerate(arguments[:20]):  # limit for sanity
+        total += 1
+        expected = labels[i] if i < len(labels) else None
 
-        # if any("⊕" in p for p in premises_raw) or "⊕" in conclusion_raw:
-        #     continue
+        if VERBOSE_MODE:
+            print("\n" + "=" * 80)
+            print(f"ARGUMENT #{i+1}")
+            print("=" * 80)
 
+        # --- Create argument ---
+        argument = Argument(premises_raw, conclusion_raw)
 
-        # --- Convert strings to WFF objects ---
-        premises = [string_to_strict_WFF(p) for p in premises_raw]
-        conclusion = string_to_strict_WFF(conclusion_raw)
-        
+        if VERBOSE_MODE:
+            print("\n--- Original Argument ---")
+            print(argument)
 
-        print("\n" + "="*60)
-        print(f"Argument #{i+1}")
-        print("-"*60)
-        print("Premises:")
-        for p in premises:
-            print(f"  {p}") #\n\t {p.type} \n\t {p.operator} \n\t {p.quantifier} \n\t {p.operand1, p.operand2}
-        print(f"Conclusion: {conclusion}")
+        # --- Step 1: Quantifier Expansion ---
+        if argument.is_strict():
+            domain = sorted(
+                set(chain.from_iterable(p.get_domain() for p in argument.premises))
+                | set(argument.conclusion.get_domain())
+            )
 
+            if VERBOSE_MODE:
+                print(f"\nDetected domain: {domain if domain else '(none found)'}")
 
-        # ======= Getting Domain and Eliminating Quantifiers ====== #
+            if domain:
+                argument.expand_quantifiers(domain)
+                if VERBOSE_MODE:
+                    print("\n--- After Quantifier Expansion ---")
+                    print(argument)
 
-        # collect all domain symbols (lowercase identifiers) from premises and conclusion
-        premise_domains = list(chain.from_iterable(p.get_domain() for p in premises))
-        conclusion_domain = conclusion.get_domain()
+        # --- Step 2: Convert to CNF ---
+        cnf_argument = argument.to_cnf()
 
-        # unify and deduplicate
-        domain = sorted(set(premise_domains + conclusion_domain))
+        if VERBOSE_MODE:
+            print("\n--- CNF Form ---")
+            print(cnf_argument)
+            print("\nCNF Clauses:")
+            for j, p in enumerate(cnf_argument.premises):
+                print(f"  Premise {j+1}: {p.get_clauses()}")
+            print(f"  Conclusion: {cnf_argument.conclusion.get_clauses()}")
 
-        print(f"\nDomain: {domain}")
+        # --- Step 3: Solve with PySAT ---
+        is_valid, counterexample = cnf_argument.solve()
+        computed_label = VALID if is_valid else INVALID
+        matches = expected is None or computed_label == expected
 
-
-        for p in premises:
-            p.expand_quantifiers(domain)
-        conclusion.expand_quantifiers(domain)
-
-        print("\nExpanded Premises:")
-        for p in premises:
-            print(f"  {p}")
-
-        print(f"Expanded Conclusion: {conclusion}")
-
-        # ======= REMOVING IMPLICATIONS AND XORs ====== #
-
-        print("\nSimplifying WFFs (eliminating →, ↔, and ⊕)")
-        simplified_premises = []
-        for p in premises:
-            print(f"  Original: {p}")
-            no_imp = eliminate_implications(p)
-            no_xor = eliminate_xor(no_imp)
-            simplified_premises.append(no_xor)
-            print(f"  Simplified: {no_xor}\n")
-
-        # Simplify the conclusion too
-        print("Simplifying conclusion...")
-        no_imp_conc = eliminate_implications(conclusion)
-        no_xor_conc = eliminate_xor(no_imp_conc)
-        simplified_conclusion = no_xor_conc
-        print(f"  Original conclusion: {conclusion}")
-        print(f"  Simplified conclusion: {simplified_conclusion}\n")
-
-        # Replace old WFFs with simplified versions
-        premises = simplified_premises
-        conclusion = simplified_conclusion
-
-        print("\n" + "="*60)
-        print(f"Argument #{i+1}")
-        print("-"*60)
-        print("Premises:")
-        for p in premises:
-            print(f"  {p}") #\n\t {p.type} \n\t {p.operator} \n\t {p.quantifier} \n\t {p.operand1, p.operand2}
-        print(f"Conclusion: {conclusion}")
-
-        break
-
-    
-
-
-        # --- Combine premises into single WFF ---
-        premises_WFF = list_to_WFF(premises, AND)
-        domain = list(set(premises_WFF.get_domain() + conclusion.get_domain()))
-
-        # if len(domain) == 1: continue
-
-        # print(f"Domain: {domain}")
-
-        # --- Expand quantifiers ---
-        premises_WFF.expand_quantifers(domain)
-        conclusion.expand_quantifers(domain)
-        # print(f"Expanded Premises: {premises_WFF}")
-        # print(f"Expanded Conclusion: {conclusion}")
-
-        # --- Build final argument WFF: (Premises ∧ ¬Conclusion) ---
-        conclusion_negated = new_WFF(NOT, conclusion)
-        argument = new_WFF(AND, premises_WFF, conclusion_negated)
-        # print(f"Combined Argument WFF: {argument}")
-
-        # --- Solve using PySAT ---
-        is_valid, model, decoded_model = check_argument_validity(argument)
-
-        print("-"*60)
-        if is_valid:
-            result = VALID
-            print("The argument is VALID.")
-            print("    No satisfying assignment exists (premises entail conclusion).")
+        if VERBOSE_MODE:
+            print("\n--- SAT Evaluation ---")
+            print(f"Expected: {expected}")
+            print(f"Computed: {computed_label}")
+            if not is_valid and counterexample:
+                print("Counterexample model:")
+                for var, val in counterexample.items():
+                    print(f"  {var} = {val}")
+            print(f"✅ Match: {matches}")
+            print("=" * 80 + "\n")
         else:
-            result = INVALID
-            print("The argument is INVALID.")
-            print("    Counterexample:")
-            if decoded_model:
-                for sym, val in decoded_model.items():
-                    print(f"      {sym} = {val}")
-            else:
-                print("      (No decoded model available)")
-        print("="*60 + "\n")
+            status_icon = "✅" if matches else "❌"
+            print(
+                f"{status_icon}  Argument #{i+1:02d}: "
+                f"Expected={expected:7s}  |  Solved={computed_label:7s}  "
+                f"{'(Counterexample found)' if not is_valid else ''}"
+            )
 
-        print(f"{is_valid} corresponds to dataset label: {labels[i]}")
-        assert (result == labels[i])
+        if matches:
+            correct += 1
 
-    # for i, arg in enumerate(arguments):
-    #     # if i != 19: continue
-    #     # print(maps[i])
-    #     premises = arg[0]
-    #     conclusion = arg[1]
-
-    #     premises = [WFF(p) for p in premises]
-    #     conclusion = WFF(conclusion)
+    # === 3. Summary ===
+    print("\n" + "=" * 80)
+    print("RESULT SUMMARY")
+    print("=" * 80)
+    print(f"Total arguments evaluated: {total}")
+    print(f"Correctly matched labels:   {correct}")
+    print(f"Accuracy:                   {correct / total:.2%}")
+    print("=" * 80)
 
 
-    #     print(f"Premises = {premises}")
-    #     print(f"Conclusion = {conclusion}")
-
-    #     premises_WFF = list_to_WFF(premises, AND)
-    #     domain = list(set(premises_WFF.get_domain() + conclusion.get_domain()))
-    #     print(f"Domain = {domain}")
-
-
-    #     print(f"Combined:", premises_WFF)
-
-    #     premises_WFF.expand_quantifers(domain)
-    #     conclusion.expand_quantifers(domain)
-    #     print(f"Premises Expanded:", premises_WFF)
-    #     print(f"Conclusion Expanded:", conclusion)
-
-    #     # Negate and add conclusion
-    #     premises_negated = new_WFF(NOT, premises_WFF)
-
-    #     argument = new_WFF(AND, premises_negated, conclusion)
-    #     print(f"Argument = {argument}")
-
-
-    #     #Solve
-    #     # cnf_argument = to_cnf(argument)
-    #     # print(f"CNF = {cnf_argument}")
-
-
-    #     label, assignment = check_argument_validity(argument)
-    #     if label:
-    #         print(f"The Argument is invalid! \n\t Assignment: {assignment}")
-    #     else:
-    #         print(f"The Argument is valid    \n\t Assignment: {assignment}")
-
-
-       
-        
-
-
-
-        # for p in premises:
-        #     pw = WFF(p)
-        #     print(f"Premise: {p}      --> {pw}")
-        #     pw.expand_quantifers()
-        #     print(f"After expanding: {pw}")
-
-
-    
-main()
+if __name__ == "__main__":
+    main()
