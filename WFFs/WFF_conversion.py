@@ -1,9 +1,10 @@
 
 from constants import QuantifierType, OperatorType, UnaryOperator, BinaryOperator, ATOMIC_WFF, UNARY_WFF, BINARY_WFF, QUANTIFIER_WFF
-from constants import UNARY_OPERATORS, BINARY_OPERATORS, UNIVERSAL_Q, EXISTENTIAL_Q, AND, OR, NOT
+from constants import UNARY_OPERATORS, BINARY_OPERATORS, UNIVERSAL_Q, EXISTENTIAL_Q, AND, OR, NOT, IMPLIES
 
 from WFFs.strictWFFs import StrictWFF
 from WFFs.cnfWFFs import CnfWFF
+
 
 
 # === Expanding Arguments === #
@@ -41,6 +42,13 @@ def strict_to_cnf(wff: StrictWFF) -> CnfWFF:
     return cnf_wff
 
 def convert_to_cnf_wff(wff: StrictWFF) -> CnfWFF:
+    """
+    Converts a StrictWFF into CNF form.
+    Ensures all disjunctions have only literal-level operands.
+    """
+    # --- Step 0: ensure disjunctions are distributed over conjunctions ---
+    wff = distribute_or_over_and(wff)
+
     # Atomic
     if wff.type == ATOMIC_WFF:
         return CnfWFF(atom=wff.atom)
@@ -157,15 +165,8 @@ def eliminate_implications(wff: StrictWFF) -> StrictWFF:
         B = eliminate_implications(wff.operand2)
 
         # Implication
-        if op == "→":
-            return StrictWFF(operator="∨", operand1=StrictWFF(operator="~", operand1=A), operand2=B)
-
-        # Biconditional
-        elif op == "↔":
-            left  = StrictWFF(operator="→", operand1=A, operand2=B)
-            right = StrictWFF(operator="→", operand1=B, operand2=A)
-            both  = StrictWFF(operator="∧", operand1=left, operand2=right)
-            return eliminate_implications(both)  # recurse again to remove → in those
+        if op == f"{IMPLIES}":
+            return StrictWFF(operator=f"{OR}", operand1=StrictWFF(operator=f"{NOT}", operand1=A), operand2=B)
 
         # Regular binary (∧, ∨, ⊕)
         else:
@@ -231,53 +232,47 @@ def demorgans(wff: StrictWFF) -> StrictWFF:
       ¬(A ∨ B) → (¬A ∧ ¬B)
       ¬¬A → A
     """
-    # Atomic formula — nothing to do
+    # Base case: atomic
     if wff.type == ATOMIC_WFF:
         return wff
 
-    # --- Negation case ---
+    # Negation case
     if wff.type == UNARY_WFF and wff.operator == NOT:
         inner = demorgans(wff.operand1)
 
-        # After applying a rule, recurse again to ensure inner parts are processed
-        if inner.type == BINARY_WFF:
-            if inner.operator == AND:
-                return demorgans(
-                    StrictWFF(operator=OR,
-                            operand1=StrictWFF(operator=NOT, operand1=inner.operand1),
-                            operand2=StrictWFF(operator=NOT, operand1=inner.operand2))
-                )
-            elif inner.operator == OR:
-                return demorgans(
-                    StrictWFF(operator=AND,
-                            operand1=StrictWFF(operator=NOT, operand1=inner.operand1),
-                            operand2=StrictWFF(operator=NOT, operand1=inner.operand2))
-                )
+        # Handle double negation
+        if inner.type == UNARY_WFF and inner.operator == NOT:
+            return demorgans(inner.operand1)
 
-        # Handle ¬(A ∧ B) and ¬(A ∨ B)
+        # De Morgan rules
         if inner.type == BINARY_WFF:
             a, b = inner.operand1, inner.operand2
             if inner.operator == AND:
                 # ¬(A ∧ B) → (¬A ∨ ¬B)
-                return StrictWFF(operator=OR,
-                                 operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
-                                 operand2=demorgans(StrictWFF(operator=NOT, operand1=b)))
+                return StrictWFF(
+                    operator=OR,
+                    operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
+                    operand2=demorgans(StrictWFF(operator=NOT, operand1=b)),
+                )
             elif inner.operator == OR:
                 # ¬(A ∨ B) → (¬A ∧ ¬B)
-                return StrictWFF(operator=AND,
-                                 operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
-                                 operand2=demorgans(StrictWFF(operator=NOT, operand1=b)))
+                return StrictWFF(
+                    operator=AND,
+                    operand1=demorgans(StrictWFF(operator=NOT, operand1=a)),
+                    operand2=demorgans(StrictWFF(operator=NOT, operand1=b)),
+                )
 
-        # Otherwise, it's ¬Atom
+        # Otherwise it's just ¬Atom
         return StrictWFF(operator=NOT, operand1=inner)
 
-    # --- Binary case ---
+    # Binary case: recurse on both sides
     if wff.type == BINARY_WFF:
         left = demorgans(wff.operand1)
         right = demorgans(wff.operand2)
         return StrictWFF(operator=wff.operator, operand1=left, operand2=right)
 
     return wff
+
 
 
 def distribute_or_over_and_helper(left: StrictWFF, right: StrictWFF) -> StrictWFF:

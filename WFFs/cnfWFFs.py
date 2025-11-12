@@ -139,13 +139,13 @@ class CnfWFF:
         if self.type == ATOMIC_WFF:
             return self.atom
         elif self.type == UNARY_WFF:
-            return f"~{repr(self.operands[0])}"
+            return f"{NOT}{repr(self.operands[0])}"
         elif self.type == DISJUNCTIVE_WFF:
             return "(" + " ∨ ".join(repr(op) for op in self.operands) + ")"
         elif self.type == CONJUNCTIVE_WFF:
             return "(" + " ∧ ".join(repr(op) for op in self.operands) + ")"
         else:
-            return "⊥"
+            TypeError (f"CNF WFF has type {self.type}")
 
     # ==========================================================
     # --- CNF Utilities ---
@@ -154,36 +154,19 @@ class CnfWFF:
 
     def negate(self) -> "CnfWFF":
         """
-        Returns the negation of this CNF WFF as a new CnfWFF.
-        
-        Applies De Morgan’s laws and pushes negations down:
-            ¬(A ∧ B) → (¬A ∨ ¬B)
-            ¬(A ∨ B) → (¬A ∧ ¬B)
-            ¬¬A → A
-            ¬A (atomic) → A
+        Return ¬self as a valid CnfWFF.
+        We convert to StrictWFF, negate, fully normalize to CNF, then convert back.
         """
-        # --- Base case: atomic or simple negation ---
-        if self.type == "atomic_wff":
-            return CnfWFF(operator=NOT, operands=[self])
-        if self.operator == NOT:
-            # Double negation: ¬¬A → A
-            return self.operands[0]
+        from WFFs.strictWFFs import StrictWFF
+        from WFFs.WFF_conversion import strict_to_cnf
 
-        # --- Recursive cases for binary connectives ---
-        if self.operator == AND:
-            # ¬(A ∧ B) → (¬A ∨ ¬B)
-            left_neg = self.operands[0].negate()
-            right_neg = self.operands[1].negate()
-            return CnfWFF(operator=OR, operands=[left_neg, right_neg])
+        strict = self.to_strict()
+        neg_strict = StrictWFF(operator=NOT, operand1=strict)
+        return strict_to_cnf(neg_strict)
 
-        if self.operator == OR:
-            # ¬(A ∨ B) → (¬A ∧ ¬B)
-            left_neg = self.operands[0].negate()
-            right_neg = self.operands[1].negate()
-            return CnfWFF(operator=AND, operands=[left_neg, right_neg])
 
-        # --- Fallback for other or unknown types ---
-        return CnfWFF(operator=NOT, operands=[self])
+
+
 
 
     def flatten_conjunctions(self) -> List[CnfWFF]:
@@ -211,7 +194,7 @@ class CnfWFF:
         if self.type == ATOMIC_WFF:
             return [self.atom]
         if self.type == UNARY_WFF:
-            return [f"~{self.operands[0].atom}"]
+            return [f"{NOT}{self.operands[0].atom}"]
         if self.type == DISJUNCTIVE_WFF:
             lits = []
             for op in self.operands:
@@ -259,3 +242,28 @@ class CnfWFF:
                 if len(self.operands) > 2 else self.operands[1].to_strict()
             return StrictWFF(operator=self.operator, operand1=left, operand2=right)
         raise ValueError(f"Unsupported CNF WFF type in to_strict: {self.type}")
+    
+def normalize_cnf(cnf: "CnfWFF") -> "CnfWFF":
+    """
+    Ensures that CNF structure obeys AND-of-ORs hierarchy
+    by distributing OR over AND if needed.
+    """
+    # Flatten conjunctions/disjunctions recursively
+    if cnf.operator == OR:
+        # distribute OR over AND
+        new_operands = []
+        for op in cnf.operands:
+            if op.operator == AND:
+                # (A ∨ (B ∧ C)) → ((A ∨ B) ∧ (A ∨ C))
+                distributed = [
+                    normalize_cnf(CnfWFF(operator=OR, operands=[cnf.operands[0], sub]))
+                    for sub in op.operands
+                ]
+                return CnfWFF(operator=AND, operands=distributed)
+            new_operands.append(op)
+        cnf.operands = new_operands
+
+    elif cnf.operator == AND:
+        cnf.operands = [normalize_cnf(op) for op in cnf.operands]
+
+    return cnf

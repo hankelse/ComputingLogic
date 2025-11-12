@@ -10,7 +10,7 @@ from typing import Optional, Literal, Union
 from copy import deepcopy
 
 from constants import QuantifierType, OperatorType, UnaryOperator, BinaryOperator, ATOMIC_WFF, UNARY_WFF, BINARY_WFF, QUANTIFIER_WFF
-from constants import UNARY_OPERATORS, BINARY_OPERATORS, UNIVERSAL_Q, EXISTENTIAL_Q, AND, OR
+from constants import UNARY_OPERATORS, BINARY_OPERATORS, UNIVERSAL_Q, EXISTENTIAL_Q, AND, OR, NOT, IMPLIES, XOR
 
 
 
@@ -34,7 +34,6 @@ class StrictWFF:
         self.operand2 = operand2
         self.quantifier = quantifier
 
-
         self.type = self.assign_and_enforce_type()
         
     def __repr__(self) -> str:
@@ -43,9 +42,11 @@ class StrictWFF:
             Handles all four WFF types: atomic, unary, binary, quantified.
             """
 
+            # assert self.type in [ATOMIC_WFF, UNARY_WFF, BINARY_WFF, QUANTIFIER_WFF], f"Strict WFF has unknown type={self.type}"
+
             # --- Atomic ---
             if self.type == ATOMIC_WFF:
-                return self.atom or "⊥"
+                return self.atom or "EMPTY_ATOM_ERROR"
 
             # --- Unary ---
             elif self.type == UNARY_WFF:
@@ -63,7 +64,7 @@ class StrictWFF:
                 return f"{quant}{var}({repr(self.operand1)})"
 
             # --- Unknown ---
-            return "⊥"
+            return "error"
 
     def assign_and_enforce_type(self):
         """
@@ -108,7 +109,7 @@ class StrictWFF:
             return UNARY_WFF
     
     def get_domain(self) -> list[str]:
-        """Collects all lowercase atoms in this WFF recursively."""
+        """Collects all lowercase atoms in this WFF recursively. Eliminates Duplicates"""
         if hasattr(self, "domain") and self.domain:
             return self.domain
 
@@ -123,24 +124,22 @@ class StrictWFF:
 
         return list(set(domains))
     
-    def expand_quantifiers(self, domain: list[str]) -> None:
+    def expand_quantifiers(self, domain: list[str]) -> "StrictWFF":
         """
-        Recursively expands all quantifiers in this StrictWFF
-        into finite conjunctions (∀) or disjunctions (∃)
-        over the given domain of constants.
+        Recursively expands all quantifiers (∀, ∃) in this WFF into
+        finite conjunctions or disjunctions over the given domain.
+        Returns the possibly modified WFF (in place mutation + return).
         """
-    
 
-        # --- Step 1: Recurse on operands first ---
-        if self.type in (UNARY_WFF, BINARY_WFF):
-            if self.operand1:
-                self.operand1.expand_quantifiers(domain)
-            if self.operand2:
-                self.operand2.expand_quantifiers(domain)
+        # --- Step 1: Recurse and update operands ---
+        if self.operand1:
+            self.operand1 = self.operand1.expand_quantifiers(domain)
+        if self.operand2:
+            self.operand2 = self.operand2.expand_quantifiers(domain)
 
-        # --- Step 2: Expand quantifier at this node ---
-        if not self.quantifier:
-            return
+        # --- Step 2: Nothing to do if not quantified ---
+        if self.quantifier == None:
+            return self
 
         symbol, variable = self.quantifier
 
@@ -151,28 +150,29 @@ class StrictWFF:
         else:
             raise ValueError(f"Unknown quantifier: {symbol}")
 
-        # Create copies of the body with variable replaced by each domain constant
+        # --- Step 3: Expand quantifier body across domain constants ---
         new_wffs = []
         for const in domain:
-            if const == variable: continue
-
-            wff_copy = deepcopy(self.operand1)  # body of quantifier
+            if const == variable:
+                continue
+            wff_copy = deepcopy(self.operand1)
             wff_copy.replace(variable, const)
             wff_copy.quantifier = None
             new_wffs.append(wff_copy)
 
-        # --- Join all copies with the appropriate operator ---
-        # --- Join all copies with the appropriate operator ---
-        if not new_wffs:
-            return  # no domain to expand into, skip expansion
+
+        # --- Step 4: Build conjunction/disjunction over expanded copies ---
         joined = list_to_StrictWFF(new_wffs, join_op)
 
-        # Mutate this node into the joined WFF
+        # --- Step 5: Mutate this node into expanded version ---
         self.operator = joined.operator
         self.operand1 = joined.operand1
         self.operand2 = joined.operand2
         self.quantifier = None
         self.type = joined.type
+        if self.type == ATOMIC_WFF: self.atom = joined.atom
+
+        return self
 
     def replace(self, to_replace, replacer):
         """Recursively replace variable names in atomic strings."""
@@ -217,6 +217,7 @@ def string_to_WFF(s: str) -> StrictWFF:
     Parse a logical formula string into a StrictWFF.
     Supports quantifiers, unary and binary operators, and atomic propositions.
     """
+    if not is_valid_wff_string(s): return None
 
     s = strip_outer_parentheses(s.replace(" ", ""))
     if not s:
@@ -237,7 +238,7 @@ def string_to_WFF(s: str) -> StrictWFF:
         return StrictWFF(atom=s)
 
     # --- Unary ---
-    if main_op in {"~"}:
+    if main_op in {f"{NOT}"}:
         idx = s.index(main_op)
         operand_str = s[idx + 1:]
         return StrictWFF(operator=main_op, operand1=string_to_WFF(operand_str))
@@ -289,6 +290,8 @@ def find_main_operator(s: str) -> Optional[str]:
     s = s.strip()
     if not s:
         return None
+    
+    s.replace("¬", '~', -1)
 
     # Quantifiers as main operator if appear at beginning
     if len(s) >= 2 and s[0] in ("∀", "∃") and s[1].isalpha():
@@ -310,6 +313,32 @@ def find_main_operator(s: str) -> Optional[str]:
                 found_unary = ch
     return found_unary
 
+def is_valid_wff_string(s: str) -> bool:
+    """
+    Checks whether a string contains only allowed characters:
+      - Alphabetical (predicates, variables, constants)
+      - Parentheses, spaces
+      - Recognized logical operators from `constants`
+    
+    Returns:
+        True if all characters are valid, False otherwise.
+    """
+
+    allowed_symbols = {
+        AND, OR, NOT, IMPLIES, XOR,
+        UNIVERSAL_Q, EXISTENTIAL_Q,
+        '(', ')', ' ', '¬', '~', '∧', '∨', '→', '⊕', '∀', '∃'
+    }
+
+    s = s.replace("¬", '~', -1)
+
+    for ch in s:
+        if ch.isalpha():
+            continue
+        if ch in allowed_symbols:
+            continue
+        return False
+    return True
 
 # === Random Helpers === #
 

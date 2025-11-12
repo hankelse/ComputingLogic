@@ -126,9 +126,13 @@ class TestToCnf(unittest.TestCase):
 
     def test_or_over_and(self):
         wff = string_to_WFF("(P∨(Q∧R))")
-        result = convert_to_cnf_wff(wff)
+        result = strict_to_cnf(wff)
         expected = string_to_WFF("((P∨Q)∧(P∨R))")
-        self.assertEqual(repr(result), repr(expected))
+        self.assertEqual(
+            result.get_clauses(), strict_to_cnf(expected).get_clauses(),
+            msg=f"Expected {expected}, got {result}"
+        )
+
 
     def test_nested_or_over_and(self):
         wff = string_to_WFF("((P∨Q)∨(R∧S))")
@@ -142,8 +146,12 @@ class TestFullCNFPipeline(unittest.TestCase):
     def test_implication_to_cnf(self):
         wff = string_to_WFF("(P→Q)")
         cnf = strict_to_cnf(wff)
-        expected = string_to_WFF("(~P∨Q)")
-        self.assertEqual(repr(cnf), repr(expected))
+        expected = string_to_WFF(f"({NOT}P∨Q)")
+        cnf_expected = strict_to_cnf(expected)
+        self.assertEqual(
+            cnf.get_clauses(), cnf_expected.get_clauses(),
+            msg=f"Expected {cnf_expected.get_clauses()}, got {cnf.get_clauses()}"
+        )
 
     def test_xor_to_cnf(self):
         wff = string_to_WFF("(P⊕Q)")

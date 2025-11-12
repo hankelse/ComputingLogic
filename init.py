@@ -5,7 +5,7 @@ from WFFs.WFF_conversion import strict_to_cnf
 from constants import VALID, INVALID
 
 # Toggle verbosity here
-VERBOSE_MODE = False
+VERBOSE_MODE = True
 
 
 def main():
@@ -29,39 +29,28 @@ def main():
         # --- Create argument ---
         argument = Argument(premises_raw, conclusion_raw)
 
+        if not argument.solvable(): continue
+
         if VERBOSE_MODE:
             print("\n--- Original Argument ---")
             print(argument)
 
         # --- Step 1: Quantifier Expansion ---
-        if argument.is_strict():
-            domain = sorted(
-                set(chain.from_iterable(p.get_domain() for p in argument.premises))
-                | set(argument.conclusion.get_domain())
-            )
+        result = argument.expand_quantifiers()
 
-            if VERBOSE_MODE:
-                print(f"\nDetected domain: {domain if domain else '(none found)'}")
-
-            if domain:
-                argument.expand_quantifiers(domain)
-                if VERBOSE_MODE:
-                    print("\n--- After Quantifier Expansion ---")
-                    print(argument)
 
         # --- Step 2: Convert to CNF ---
-        cnf_argument = argument.to_cnf()
+        cnf_wff = argument.to_cnf()
 
         if VERBOSE_MODE:
             print("\n--- CNF Form ---")
-            print(cnf_argument)
+            print(cnf_wff)
             print("\nCNF Clauses:")
-            for j, p in enumerate(cnf_argument.premises):
-                print(f"  Premise {j+1}: {p.get_clauses()}")
-            print(f"  Conclusion: {cnf_argument.conclusion.get_clauses()}")
+            for clause in cnf_wff.get_clauses():
+                print(clause)
 
         # --- Step 3: Solve with PySAT ---
-        is_valid, counterexample = cnf_argument.solve()
+        is_valid, counterexample = argument.solve()
         computed_label = VALID if is_valid else INVALID
         matches = expected is None or computed_label == expected
 

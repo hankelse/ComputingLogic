@@ -43,7 +43,7 @@ def cnf_to_clauses(cnf: CnfWFF) -> Tuple[List[List[int]], Dict[str, int]]:
 
     def literal_to_int(lit: str) -> int:
         """Convert literal string (e.g. '~P') → signed int."""
-        if lit.startswith("~"):
+        if lit.startswith(f"{NOT}"):
             sym = lit[1:]
             return -_get_var(sym, varmap, counter)
         return _get_var(lit, varmap, counter)
@@ -87,38 +87,42 @@ def solve_cnf(cnf: CnfWFF) -> Tuple[bool, Dict[str, bool]]:
 # --- Argument Solver Interface ---
 # ==========================================================
 
-def solve_argument(argument):
-    """Checks validity by testing satisfiability of (Premises ∧ ¬Conclusion)."""
-    cnf_argument = argument.to_cnf() if argument.is_strict() else argument
-    premises = cnf_argument.premises
-    conclusion = cnf_argument.conclusion
-    neg_conclusion = conclusion.negate()
 
-    # --- Step 2: Collect CNF clauses ---
-    clauses = []
-    for p in premises:
-        clauses.extend(p.get_clauses())
-    clauses.extend(neg_conclusion.get_clauses())
+def solve_argument(cnf_wff: CnfWFF):
+    """
+    Solves a CNF WFF that represents (Premises ∧ ¬Conclusion).
+    
+    Returns:
+        (is_valid, counterexample)
+        
+    The argument is valid ⇔ (Premises ∧ ¬Conclusion) is unsatisfiable.
+    """
 
-    # --- Step 3: Helper for literals ---
+    # --- Step 1: Get clauses directly from CNF WFF ---
+    clauses = cnf_wff.get_clauses()  # Each clause is a list of literals like ["~P", "Q"]
+
+    # --- Step 2: Convert literals into CNF node form (for PySAT solver) ---
     def lit_to_cnf(lit: str) -> CnfWFF:
-        return CnfWFF(operator=NOT, operands=[CnfWFF(atom=lit[1:])]) if lit.startswith("~") else CnfWFF(atom=lit)
+        if lit.startswith(NOT):
+            return CnfWFF(operator=NOT, operands=[CnfWFF(atom=lit[1:])])
+        return CnfWFF(atom=lit)
 
-    # --- Step 4: Build CNF structure ---
-    argument_cnf_operands = []
+    clause_nodes = []
     for clause in clauses:
-        lits = [lit_to_cnf(lit) for lit in clause]
+        lits = [lit_to_cnf(l) for l in clause]
         if len(lits) == 1:
-            argument_cnf_operands.append(lits[0])
+            clause_nodes.append(lits[0])
         else:
-            argument_cnf_operands.append(CnfWFF(operator=OR, operands=lits))
+            clause_nodes.append(CnfWFF(operator=OR, operands=lits))
 
-    argument_cnf = CnfWFF(operator=AND, operands=argument_cnf_operands)
+    # --- Step 3: Combine clauses into one CNF conjunction ---
+    flat_cnf = CnfWFF(operator=AND, operands=clause_nodes)
 
-    # --- Step 5: Solve with PySAT ---
-    is_sat, model = solve_cnf(argument_cnf)
+    # --- Step 4: Solve with SAT solver ---
+    is_sat, model = solve_cnf(flat_cnf)
 
-    # --- Step 6: Interpret result ---
+    # --- Step 5: Interpret results ---
     is_valid = not is_sat
     counterexample = model if is_sat else None
+
     return is_valid, counterexample
